@@ -74,3 +74,22 @@ export function readPostalCode(villageCode: number) {
 
   return rows.slice(1).find((row) => row[0] === villageCode)?.[1] || null
 }
+
+export function getFullData(
+  provinceCode: number,
+  regencyCode: number,
+  districtCode: number,
+  villageCode: number
+) {
+  return {
+    province: readProvinces().find((row) => row.code === provinceCode),
+    regency: readRegencies(provinceCode).find(
+      (row) => row.code === regencyCode
+    ),
+    district: readDistricts(regencyCode).find(
+      (row) => row.code === districtCode
+    ),
+    village: readVillages(districtCode).find((row) => row.code === villageCode),
+    postalCode: readPostalCode(villageCode),
+  }
+}

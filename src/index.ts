@@ -5,6 +5,7 @@ import {
   readDistricts,
   readVillages,
   readPostalCode,
+  getFullData,
 } from './lib/reader'
 import cors from 'cors'
 
@@ -47,6 +48,20 @@ app.get('/postalcode/:villageCode', (req, res) => {
     data: readPostalCode(Number(req.params.villageCode)),
   })
 })
+
+app.get(
+  '/full/:provinceCode/:regencyCode/:districtCode/:villageCode',
+  (req, res) => {
+    res.json({
+      data: getFullData(
+        Number(req.params.provinceCode),
+        Number(req.params.regencyCode),
+        Number(req.params.districtCode),
+        Number(req.params.villageCode)
+      ),
+    })
+  }
+)
 
 if (process.env.NODE_ENV === 'development') {
   app.listen(3000, () => console.log(`Server running on port ${3000}`))

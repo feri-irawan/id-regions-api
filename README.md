@@ -9,6 +9,7 @@ API for Indonesian regions. Using data from [Api Wilayah Indonesia](https://gith
 - `GET /districts/:regencyCode` - Get districts by regency code
 - `GET /villages/:districtCode` - Get villages by district code
 - `GET /postalcode/:villageCode` - Get postal code by village code
+- `GET /full/:provinceCode/:regencyCode/:districtCode/:villageCode` - Get full data by province code, regency code, district code, and village code
 
 ## Contributing
 

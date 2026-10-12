@@ -110,6 +110,26 @@ describe('GET /postalcode/:villageCode', () => {
   })
 })
 
+describe('GET /full/:villageCode', () => {
+  test('returns the same hierarchy as the four-code route', async () => {
+    const short = await get('/full/1101012002')
+    const long = await get('/full/11/1101/110101/1101012002')
+    expect(short.status).toBe(200)
+    expect(short.body).toEqual(long.body)
+  })
+
+  test('returns 404 for an unknown village', async () => {
+    const { status, body } = await get('/full/1101019999')
+    expect(status).toBe(404)
+    expect(body).toEqual({ error: 'Village 1101019999 not found' })
+  })
+
+  test('rejects an invalid code', async () => {
+    const { status } = await get('/full/abc')
+    expect(status).toBe(400)
+  })
+})
+
 describe('GET /full/:provinceCode/:regencyCode/:districtCode/:villageCode', () => {
   test('returns the full hierarchy', async () => {
     const { status, body } = await get('/full/11/1101/110101/1101012002')

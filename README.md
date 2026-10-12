@@ -10,6 +10,7 @@ API for Indonesian regions. Using data from [Api Wilayah Indonesia](https://gith
 - `GET /villages/:districtCode` - Get villages by district code
 - `GET /postalcode/:villageCode` - Get postal code by village code
 - `GET /full/:provinceCode/:regencyCode/:districtCode/:villageCode` - Get full data by province code, regency code, district code, and village code
+- `GET /full/:villageCode` - Get full data by village code alone
 
 Codes are numeric: provinces have 2 digits (`11`), regencies 4 (`1101`), districts 6 (`110101`) and villages 10 (`1101012002`).
 

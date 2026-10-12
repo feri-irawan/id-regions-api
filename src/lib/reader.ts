@@ -150,3 +150,18 @@ export function getFullData(
     postalCode: readPostalCode(village.code),
   }
 }
+
+/** Returns the full hierarchy of a village from its code alone. */
+export function getFullDataByVillage(villageCode: number) {
+  const village = findVillage(villageCode)
+  const district = village && findDistrict(village.parentCode)
+  const regency = district && findRegency(district.parentCode)
+  if (!village || !district || !regency) return null
+
+  return getFullData(
+    regency.parentCode,
+    regency.code,
+    district.code,
+    village.code
+  )
+}

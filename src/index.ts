@@ -7,6 +7,7 @@ import {
   readVillages,
   readPostalCode,
   getFullData,
+  getFullDataByVillage,
   findProvince,
   findRegency,
   findDistrict,
@@ -91,6 +92,11 @@ app.get('/villages/:districtCode', (req, res) => {
 app.get('/postalcode/:villageCode', (req, res) => {
   const code = resolveCode(res, req.params.villageCode, 'Village', findVillage)
   if (code !== null) res.json({ data: readPostalCode(code) })
+})
+
+app.get('/full/:villageCode', (req, res) => {
+  const code = resolveCode(res, req.params.villageCode, 'Village', findVillage)
+  if (code !== null) res.json({ data: getFullDataByVillage(code) })
 })
 
 app.get(

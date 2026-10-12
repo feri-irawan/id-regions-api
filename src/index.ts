@@ -19,6 +19,12 @@ const app = express()
 app.disable('x-powered-by')
 app.use(cors())
 
+// Region data only changes with a new deployment, which purges the CDN cache
+app.use((_, res, next) => {
+  res.set('Cache-Control', 'public, max-age=3600, s-maxage=86400')
+  next()
+})
+
 const isCode = (value: string) => /^\d+$/.test(value)
 
 /**
@@ -124,6 +130,7 @@ const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
       : 500
   if (status >= 500) console.error(err)
 
+  res.set('Cache-Control', 'no-store')
   res.status(status).json({
     error: status < 500 && err.expose ? err.message : STATUS_CODES[status],
   })

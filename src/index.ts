@@ -131,8 +131,4 @@ const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
 
 app.use(errorHandler)
 
-if (process.env.NODE_ENV === 'development') {
-  app.listen(3000, () => console.log(`Server running on port ${3000}`))
-}
-
 export default app

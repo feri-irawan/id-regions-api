@@ -1,95 +1,152 @@
+import fs from 'fs'
 import path from 'path'
-import * as xlsx from 'xlsx'
 
-const DATA_DIR = path.resolve('src', 'data')
-const PROVINSI_FILE = path.join(DATA_DIR, 'provinsi.csv')
-const KABUPATEN_FILE = path.join(DATA_DIR, 'kabupaten.csv')
-const KECAMATAN_FILE = path.join(DATA_DIR, 'kecamatan.csv')
-const DESA_FILE = path.join(DATA_DIR, 'desa.csv')
-const KODEPOS_FILE = path.join(DATA_DIR, 'kodepos.csv')
+const DATA_DIR = path.join(__dirname, '..', 'data')
 
-const getRows = <T = unknown>(filePath: string) => {
-  const workbook = xlsx.readFile(filePath, { type: 'buffer' })
-
-  const sheetName = workbook.SheetNames[0]
-  if (!sheetName) {
-    throw new Error('Sheet not found')
-  }
-
-  const worksheet = workbook.Sheets[sheetName]
-  if (!worksheet) {
-    throw new Error('Worksheet not found')
-  }
-
-  return xlsx.utils.sheet_to_json<T>(worksheet, { header: 1 })
+export interface Region {
+  code: number
+  name: string
 }
 
-export function readProvinces() {
-  const rows = getRows<[number, string]>(PROVINSI_FILE)
+interface ChildRegion extends Region {
+  parentCode: number
+}
 
-  return rows.slice(1).map((row) => ({
-    code: row[0],
-    name: row[1],
+/**
+ * Reads a semicolon-separated data file, without its header row.
+ *
+ * Values never contain the separator, but some upstream names are wrapped in
+ * stray quotes (e.g. `"""35 Ilir"""`), so those are stripped.
+ */
+const readRows = (fileName: string) =>
+  fs
+    .readFileSync(path.join(DATA_DIR, fileName), 'utf8')
+    .split(/\r?\n/)
+    .slice(1)
+    .filter((line) => line !== '')
+    .map((line) =>
+      line.split(';').map((value) => value.replace(/^"+|"+$/g, ''))
+    )
+
+const indexRegions = (regions: ChildRegion[]) => {
+  const byCode = new Map<number, ChildRegion>()
+  const byParent = new Map<number, Region[]>()
+
+  for (const region of regions) {
+    byCode.set(region.code, region)
+
+    const siblings = byParent.get(region.parentCode) ?? []
+    siblings.push({ code: region.code, name: region.name })
+    byParent.set(region.parentCode, siblings)
+  }
+
+  return { byCode, byParent }
+}
+
+const loadData = () => {
+  const provinces = readRows('provinsi.csv').map(([code, name]) => ({
+    code: Number(code),
+    name,
   }))
+
+  return {
+    provinces,
+    provinceByCode: new Map<number, Region>(provinces.map((p) => [p.code, p])),
+    regencies: indexRegions(
+      readRows('kabupaten.csv').map(([code, name, provinceCode]) => ({
+        code: Number(code),
+        name,
+        parentCode: Number(provinceCode),
+      }))
+    ),
+    districts: indexRegions(
+      readRows('kecamatan.csv').map(([regencyCode, code, name]) => ({
+        code: Number(code),
+        name,
+        parentCode: Number(regencyCode),
+      }))
+    ),
+    villages: indexRegions(
+      readRows('desa.csv').map(([districtCode, code, name]) => ({
+        code: Number(code),
+        name,
+        parentCode: Number(districtCode),
+      }))
+    ),
+    postalCodes: new Map<number, number | null>(
+      readRows('kodepos.csv').map(([villageCode, postalCode]) => [
+        Number(villageCode),
+        postalCode ? Number(postalCode) : null,
+      ])
+    ),
+  }
 }
 
-export function readRegencies(provinceCode: number) {
-  const rows = getRows<[number, string, number]>(KABUPATEN_FILE)
+// Loaded on first use and kept for the lifetime of the process
+let data: ReturnType<typeof loadData> | undefined
+const getData = () => (data ??= loadData())
 
-  return rows
-    .slice(1)
-    .filter((row) => row[2] === provinceCode)
-    .map((row) => ({
-      code: row[0],
-      name: row[1],
-    }))
+export function readProvinces(): Region[] {
+  return getData().provinces
 }
 
-export function readDistricts(regencyCode: number) {
-  const rows = getRows<[number, number, string]>(KECAMATAN_FILE)
-
-  return rows
-    .slice(1)
-    .filter((row) => row[0] === regencyCode)
-    .map((row) => ({
-      code: row[1],
-      name: row[2],
-    }))
+export function readRegencies(provinceCode: number): Region[] {
+  return getData().regencies.byParent.get(provinceCode) ?? []
 }
 
-export function readVillages(districtCode: number) {
-  const rows = getRows<[number, number, string]>(DESA_FILE)
+export function readDistricts(regencyCode: number): Region[] {
+  return getData().districts.byParent.get(regencyCode) ?? []
+}
 
-  return rows
-    .slice(1)
-    .filter((row) => row[0] === districtCode)
-    .map((row) => ({
-      code: row[1],
-      name: row[2],
-    }))
+export function readVillages(districtCode: number): Region[] {
+  return getData().villages.byParent.get(districtCode) ?? []
 }
 
 export function readPostalCode(villageCode: number) {
-  const rows = getRows<[number, number]>(KODEPOS_FILE)
-
-  return rows.slice(1).find((row) => row[0] === villageCode)?.[1] || null
+  return getData().postalCodes.get(villageCode) ?? null
 }
 
+export const findProvince = (code: number) => getData().provinceByCode.get(code)
+
+export const findRegency = (code: number) =>
+  getData().regencies.byCode.get(code)
+
+export const findDistrict = (code: number) =>
+  getData().districts.byCode.get(code)
+
+export const findVillage = (code: number) => getData().villages.byCode.get(code)
+
+const toRegion = ({ code, name }: Region): Region => ({ code, name })
+
+/**
+ * Returns the full hierarchy of a village, or null when the codes do not
+ * form a valid province > regency > district > village chain.
+ */
 export function getFullData(
   provinceCode: number,
   regencyCode: number,
   districtCode: number,
   villageCode: number
 ) {
+  const province = findProvince(provinceCode)
+  const regency = findRegency(regencyCode)
+  const district = findDistrict(districtCode)
+  const village = findVillage(villageCode)
+
+  if (
+    !province ||
+    regency?.parentCode !== province.code ||
+    district?.parentCode !== regency.code ||
+    village?.parentCode !== district.code
+  ) {
+    return null
+  }
+
   return {
-    province: readProvinces().find((row) => row.code === provinceCode),
-    regency: readRegencies(provinceCode).find(
-      (row) => row.code === regencyCode
-    ),
-    district: readDistricts(regencyCode).find(
-      (row) => row.code === districtCode
-    ),
-    village: readVillages(districtCode).find((row) => row.code === villageCode),
-    postalCode: readPostalCode(villageCode),
+    province: toRegion(province),
+    regency: toRegion(regency),
+    district: toRegion(district),
+    village: toRegion(village),
+    postalCode: readPostalCode(village.code),
   }
 }

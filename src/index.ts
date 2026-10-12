@@ -9,6 +9,9 @@ import {
   getFullData,
   getFullDataByVillage,
   findVillagesByPostalCode,
+  searchRegions,
+  isLevel,
+  LEVELS,
   findProvince,
   findRegency,
   findDistrict,
@@ -140,6 +143,31 @@ app.get(
     res.json({ data })
   }
 )
+
+app.get('/search', (req, res) => {
+  const { q, level, limit = '20' } = req.query
+  if (typeof q !== 'string' || q.trim().length < 2) {
+    res.status(400).json({ error: 'Query q must be at least 2 characters' })
+    return
+  }
+  if (level !== undefined && !isLevel(level)) {
+    res
+      .status(400)
+      .json({ error: `Invalid level, use one of: ${LEVELS.join(', ')}` })
+    return
+  }
+  if (
+    typeof limit !== 'string' ||
+    !/^\d+$/.test(limit) ||
+    Number(limit) < 1 ||
+    Number(limit) > 100
+  ) {
+    res.status(400).json({ error: 'Invalid limit, use a number from 1 to 100' })
+    return
+  }
+
+  res.json({ data: searchRegions(q, { level, limit: Number(limit) }) })
+})
 
 app.use((_, res) => {
   res.status(404).json({ error: 'Not found' })

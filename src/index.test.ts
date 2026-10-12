@@ -190,6 +190,63 @@ describe('GET /full/:provinceCode/:regencyCode/:districtCode/:villageCode', () =
   })
 })
 
+describe('GET /search', () => {
+  test('ranks exact matches first and includes parents', async () => {
+    const { status, body } = await get('/search?q=aceh')
+    expect(status).toBe(200)
+    expect(body.data[0]).toEqual({
+      level: 'province',
+      code: 11,
+      name: 'Aceh (NAD)',
+      parents: [],
+    })
+  })
+
+  test('filters by level', async () => {
+    const { body } = await get('/search?q=jagakarsa&level=village')
+    expect(body.data).toEqual([
+      {
+        level: 'village',
+        code: 3174091001,
+        name: 'Jagakarsa',
+        parents: [
+          { code: 31, name: 'DKI Jakarta' },
+          { code: 3174, name: 'Kota Jakarta Selatan' },
+          { code: 317409, name: 'Jagakarsa' },
+        ],
+      },
+    ])
+  })
+
+  test.each([
+    ['regapuu', "Regapu'u"],
+    ['UJUNG MANGKI', 'Ujong Mangki (Ujung Mangki)'],
+  ])('ignores case and punctuation for %s', async (q, name) => {
+    const { body } = await get(`/search?q=${encodeURIComponent(q)}`)
+    expect(body.data.map((r: { name: string }) => r.name)).toContain(name)
+  })
+
+  test('applies the limit', async () => {
+    const { body } = await get('/search?q=jaya&limit=5')
+    expect(body.data).toHaveLength(5)
+  })
+
+  test.each([
+    ['/search', 'Query q must be at least 2 characters'],
+    ['/search?q=a', 'Query q must be at least 2 characters'],
+    [
+      '/search?q=aceh&level=city',
+      'Invalid level, use one of: province, regency, district, village',
+    ],
+    ['/search?q=aceh&limit=0', 'Invalid limit, use a number from 1 to 100'],
+    ['/search?q=aceh&limit=101', 'Invalid limit, use a number from 1 to 100'],
+  ])('rejects %s', async (path, error) => {
+    const { status, body } = await get(path)
+    expect(status).toBe(400)
+    expect(body).toEqual({ error })
+  })
+})
+
 describe('errors', () => {
   test('unknown routes return JSON', async () => {
     const { status, body } = await get('/nonexistent')

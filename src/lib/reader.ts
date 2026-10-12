@@ -184,3 +184,114 @@ export function findVillagesByPostalCode(postalCode: number) {
     (code) => getFullDataByVillage(code) ?? []
   )
 }
+
+export const LEVELS = ['province', 'regency', 'district', 'village'] as const
+export type Level = (typeof LEVELS)[number]
+
+export const isLevel = (value: unknown): value is Level =>
+  LEVELS.includes(value as Level)
+
+export interface SearchResult extends Region {
+  level: Level
+  parents: Region[]
+}
+
+interface SearchEntry {
+  level: Level
+  region: Region | ChildRegion
+  key: string
+  /** The name without its alias in brackets, e.g. "aceh" for "Aceh (NAD)" */
+  mainKey: string
+}
+
+const findByLevel: Record<
+  Level,
+  (code: number) => Region | ChildRegion | undefined
+> = {
+  province: findProvince,
+  regency: findRegency,
+  district: findDistrict,
+  village: findVillage,
+}
+
+/** Lowercases and drops punctuation, so "Regapu'u" is found by "regapuu". */
+const normalize = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/['’`]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+
+const buildSearchIndex = () => {
+  const data = getData()
+  const entries = (level: Level, regions: Iterable<Region>) =>
+    Array.from(regions, (region) => ({
+      level,
+      region,
+      key: normalize(region.name),
+      mainKey: normalize(region.name.replace(/\(.*?\)/g, '')),
+    }))
+
+  return [
+    ...entries('province', data.provinces),
+    ...entries('regency', data.regencies.byCode.values()),
+    ...entries('district', data.districts.byCode.values()),
+    ...entries('village', data.villages.byCode.values()),
+  ]
+}
+
+let searchIndex: SearchEntry[] | undefined
+
+/** Returns the ancestors of a region, from its province down. */
+const getParents = (level: Level, region: Region | ChildRegion) => {
+  const parents: Region[] = []
+  let current: Region | ChildRegion | undefined = region
+
+  for (let i = LEVELS.indexOf(level) - 1; i >= 0; i--) {
+    if (!current || !('parentCode' in current)) break
+    current = findByLevel[LEVELS[i]](current.parentCode)
+    if (current) parents.unshift(toRegion(current))
+  }
+
+  return parents
+}
+
+/** Exact matches first, then prefix, word-start and other matches. */
+const rank = ({ key, mainKey }: SearchEntry, query: string) => {
+  if (key === query || mainKey === query) return 0
+  if (key.startsWith(query)) return 1
+  if (key.includes(` ${query}`)) return 2
+  return 3
+}
+
+/** Finds regions whose name contains the query, best matches first. */
+export function searchRegions(
+  query: string,
+  options: { level?: Level; limit: number }
+): SearchResult[] {
+  const normalizedQuery = normalize(query)
+  if (!normalizedQuery) return []
+
+  searchIndex ??= buildSearchIndex()
+
+  return searchIndex
+    .filter(
+      (entry) =>
+        (!options.level || entry.level === options.level) &&
+        entry.key.includes(normalizedQuery)
+    )
+    .map((entry) => ({ entry, rank: rank(entry, normalizedQuery) }))
+    .sort(
+      (a, b) =>
+        a.rank - b.rank ||
+        LEVELS.indexOf(a.entry.level) - LEVELS.indexOf(b.entry.level) ||
+        a.entry.region.code - b.entry.region.code
+    )
+    .slice(0, options.limit)
+    .map(({ entry: { level, region } }) => ({
+      level,
+      code: region.code,
+      name: region.name,
+      parents: getParents(level, region),
+    }))
+}

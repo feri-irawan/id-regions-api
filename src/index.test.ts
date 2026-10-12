@@ -88,8 +88,18 @@ describe('GET /postalcode/:villageCode', () => {
     expect(body).toEqual({ data: 23773 })
   })
 
+  test('returns a postal code filled in from Kemendagri data', async () => {
+    const { body } = await get('/postalcode/9671101002')
+    expect(body).toEqual({ data: 98412 })
+  })
+
+  test('returns a corrected postal code', async () => {
+    const { body } = await get('/postalcode/3174091001')
+    expect(body).toEqual({ data: 12620 })
+  })
+
   test('returns null for a village without a postal code', async () => {
-    const { status, body } = await get('/postalcode/9671101002')
+    const { status, body } = await get('/postalcode/1805021009')
     expect(status).toBe(200)
     expect(body).toEqual({ data: null })
   })
@@ -161,7 +171,14 @@ describe('data', () => {
 
     expect(names).toHaveLength(38 + 514 + 7277 + 83762)
     expect(names.filter((name) => /["�]|ï¿½/.test(name))).toEqual([])
+    expect(
+      names.filter(
+        (name) =>
+          /[{}]/.test(name) || name.split('(').length !== name.split(')').length
+      )
+    ).toEqual([])
     expect(names).toContain('35 Ilir')
     expect(names).toContain("Regapu'u")
+    expect(names).toContain('Lambang Sari I, II, III')
   })
 })

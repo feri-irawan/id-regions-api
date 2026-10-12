@@ -202,6 +202,8 @@ interface SearchEntry {
   key: string
   /** The name without its alias in brackets, e.g. "aceh" for "Aceh (NAD)" */
   mainKey: string
+  words: string[]
+  compactKey: string
 }
 
 const findByLevel: Record<
@@ -225,12 +227,17 @@ const normalize = (text: string) =>
 const buildSearchIndex = () => {
   const data = getData()
   const entries = (level: Level, regions: Iterable<Region>) =>
-    Array.from(regions, (region) => ({
-      level,
-      region,
-      key: normalize(region.name),
-      mainKey: normalize(region.name.replace(/\(.*?\)/g, '')),
-    }))
+    Array.from(regions, (region) => {
+      const key = normalize(region.name)
+      return {
+        level,
+        region,
+        key,
+        mainKey: normalize(region.name.replace(/\(.*?\)/g, '')),
+        words: key.split(' '),
+        compactKey: key.replace(/ /g, ''),
+      }
+    })
 
   return [
     ...entries('province', data.provinces),
@@ -264,7 +271,65 @@ const rank = ({ key, mainKey }: SearchEntry, query: string) => {
   return 3
 }
 
-/** Finds regions whose name contains the query, best matches first. */
+/** Typos allowed in a query: none below 4 letters, 1 up to 7, then 2. */
+const maxTypos = (query: string) => {
+  const letters = query.replace(/ /g, '').length
+  return letters < 4 ? 0 : letters < 8 ? 1 : 2
+}
+
+/**
+ * Edit distance counting an adjacent swap as one typo, or Infinity as soon
+ * as it is known to exceed max.
+ */
+const typoDistance = (a: string, b: string, max: number) => {
+  if (Math.abs(a.length - b.length) > max) return Infinity
+
+  const width = b.length + 1
+  let previous2 = new Array<number>(width)
+  let previous = Array.from({ length: width }, (_, j) => j)
+  let row = new Array<number>(width)
+
+  for (let i = 1; i <= a.length; i++) {
+    row[0] = i
+    let rowMin = i
+    for (let j = 1; j < width; j++) {
+      let distance = Math.min(
+        previous[j] + 1,
+        row[j - 1] + 1,
+        previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      )
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        distance = Math.min(distance, previous2[j - 2] + 1)
+      }
+      row[j] = distance
+      if (distance < rowMin) rowMin = distance
+    }
+    if (rowMin > max) return Infinity
+    ;[previous2, previous, row] = [previous, row, previous2]
+  }
+
+  return previous[b.length] <= max ? previous[b.length] : Infinity
+}
+
+/**
+ * Smallest typo distance between the query and any run of consecutive words
+ * in the name, or the whole name without spaces ("jagakarsa" vs "Jaga Karsa").
+ */
+const fuzzyDistance = (entry: SearchEntry, query: string, max: number) => {
+  const queryWords = query.split(' ').length
+  let best = typoDistance(entry.compactKey, query.replace(/ /g, ''), max)
+  for (let i = 0; i + queryWords <= entry.words.length && best > 0; i++) {
+    const words = entry.words.slice(i, i + queryWords).join(' ')
+    best = Math.min(best, typoDistance(words, query, max))
+  }
+  return best
+}
+
+/**
+ * Finds regions whose name contains the query, best matches first. When
+ * nothing matches exactly and there are fewer results than the limit,
+ * names a typo or two away fill the rest.
+ */
 export function searchRegions(
   query: string,
   options: { level?: Level; limit: number }
@@ -274,13 +339,25 @@ export function searchRegions(
 
   searchIndex ??= buildSearchIndex()
 
-  return searchIndex
-    .filter(
-      (entry) =>
-        (!options.level || entry.level === options.level) &&
-        entry.key.includes(normalizedQuery)
-    )
+  const candidates = options.level
+    ? searchIndex.filter((entry) => entry.level === options.level)
+    : searchIndex
+  const matches = candidates
+    .filter((entry) => entry.key.includes(normalizedQuery))
     .map((entry) => ({ entry, rank: rank(entry, normalizedQuery) }))
+
+  const max = maxTypos(normalizedQuery)
+  const hasExactMatch = matches.some((match) => match.rank === 0)
+  if (!hasExactMatch && matches.length < options.limit && max > 0) {
+    for (const entry of candidates) {
+      if (entry.key.includes(normalizedQuery)) continue
+      const distance = fuzzyDistance(entry, normalizedQuery, max)
+      // Ranked after every real match, closest first
+      if (distance <= max) matches.push({ entry, rank: 3 + distance })
+    }
+  }
+
+  return matches
     .sort(
       (a, b) =>
         a.rank - b.rank ||

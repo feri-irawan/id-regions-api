@@ -226,6 +226,36 @@ describe('GET /search', () => {
     expect(body.data.map((r: { name: string }) => r.name)).toContain(name)
   })
 
+  test.each([
+    ['jagakarta', 'Jagakarsa'],
+    ['jakagarsa', 'Jagakarsa'],
+    ['surabya', 'Kota Surabaya'],
+    ['jakarta selatn', 'Kota Jakarta Selatan'],
+  ])('tolerates typos: %s finds %s', async (q, name) => {
+    const { body } = await get(`/search?q=${encodeURIComponent(q)}`)
+    expect(body.data[0].name).toBe(name)
+  })
+
+  test('ranks typo matches after real matches', async () => {
+    const { body } = await get('/search?q=bandungg')
+    const names = body.data.map((r: { name: string }) => r.name)
+    expect(names[0]).toBe('Bandunggede')
+    expect(names).toContain('Kota Bandung')
+  })
+
+  test('skips typo matches when a name matches exactly', async () => {
+    const { body } = await get('/search?q=bakongan')
+    expect(body.data.map((r: { name: string }) => r.name)).toEqual([
+      'Bakongan',
+      'Bakongan Timur',
+    ])
+  })
+
+  test('does not guess for queries under 4 letters', async () => {
+    const { body } = await get('/search?q=jkt')
+    expect(body.data).toEqual([])
+  })
+
   test('applies the limit', async () => {
     const { body } = await get('/search?q=jaya&limit=5')
     expect(body.data).toHaveLength(5)

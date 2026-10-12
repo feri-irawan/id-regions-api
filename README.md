@@ -38,7 +38,7 @@ GET /full/11/1101/110101/1101012002
 
 `/postalcode/:villageCode` returns `{ "data": null }` when the village has no postal code in the dataset.
 
-`/search` ignores case and punctuation, ranks exact matches first, and lists each result's parent regions from the province down:
+`/search` ignores case and punctuation, ranks exact matches first, and lists each result's parent regions from the province down. When no name matches exactly, names one or two typos away are added after the real matches, so `surabya` finds Surabaya:
 
 ```http
 GET /search?q=jagakarsa&level=village

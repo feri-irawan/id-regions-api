@@ -58,8 +58,8 @@ bun run typecheck  # type-check with tsc
 
 ## Data notes
 
-- Only about 17% of villages have a postal code in the upstream data.
-- A few upstream names are truncated, e.g. `Koja (Utara`.
+- 97.6% of villages have a postal code. 2,026 villages are still missing one because no trusted source could confirm it.
+- Missing postal codes, 27 wrong ones and 16 truncated names were filled in from [cahyadsn/wilayah_kodepos](https://github.com/cahyadsn/wilayah_kodepos) and [cahyadsn/wilayah](https://github.com/cahyadsn/wilayah) (Kemendagri codes, MIT License). See [src/data/NOTICE.md](src/data/NOTICE.md).
 
 ## Contributing
 

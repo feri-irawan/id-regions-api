@@ -50,16 +50,19 @@ Requires [Bun](https://bun.sh).
 
 ```sh
 bun install
-bun run dev        # start on http://localhost:3000 and restart on changes
-bun run start      # start without watching, PORT overrides the port
-bun test           # run the tests
-bun run typecheck  # type-check with tsc
+bun run dev                   # start on http://localhost:3000 and restart on changes
+bun run start                 # start without watching, PORT overrides the port
+bun test                      # run the tests
+bun run typecheck             # type-check with tsc
+bun run data:refresh          # check the source datasets for postal code and name fixes
+bun run data:refresh --write  # apply them to src/data
 ```
 
 ## Data notes
 
 - 97.6% of villages have a postal code. 2,026 villages are still missing one because no trusted source could confirm it.
 - Missing postal codes, 27 wrong ones and 16 truncated names were filled in from [cahyadsn/wilayah_kodepos](https://github.com/cahyadsn/wilayah_kodepos) and [cahyadsn/wilayah](https://github.com/cahyadsn/wilayah) (Kemendagri codes, MIT License). See [src/data/NOTICE.md](src/data/NOTICE.md).
+- `bun run data:refresh` re-runs that process against the latest source datasets. A value is only used when both Kepmendagri versions agree and the village name matches, or when [erlange/Kodepos-Wilayah-Indonesia](https://github.com/erlange/Kodepos-Wilayah-Indonesia) independently confirms it.
 
 ## Contributing
 

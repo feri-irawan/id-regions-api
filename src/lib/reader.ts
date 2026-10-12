@@ -106,21 +106,47 @@ export function readPostalCode(villageCode: number) {
   return getData().postalCodes.get(villageCode) ?? null
 }
 
+export const findProvince = (code: number) => getData().provinceByCode.get(code)
+
+export const findRegency = (code: number) =>
+  getData().regencies.byCode.get(code)
+
+export const findDistrict = (code: number) =>
+  getData().districts.byCode.get(code)
+
+export const findVillage = (code: number) => getData().villages.byCode.get(code)
+
+const toRegion = ({ code, name }: Region): Region => ({ code, name })
+
+/**
+ * Returns the full hierarchy of a village, or null when the codes do not
+ * form a valid province > regency > district > village chain.
+ */
 export function getFullData(
   provinceCode: number,
   regencyCode: number,
   districtCode: number,
   villageCode: number
 ) {
+  const province = findProvince(provinceCode)
+  const regency = findRegency(regencyCode)
+  const district = findDistrict(districtCode)
+  const village = findVillage(villageCode)
+
+  if (
+    !province ||
+    regency?.parentCode !== province.code ||
+    district?.parentCode !== regency.code ||
+    village?.parentCode !== district.code
+  ) {
+    return null
+  }
+
   return {
-    province: readProvinces().find((row) => row.code === provinceCode),
-    regency: readRegencies(provinceCode).find(
-      (row) => row.code === regencyCode
-    ),
-    district: readDistricts(regencyCode).find(
-      (row) => row.code === districtCode
-    ),
-    village: readVillages(districtCode).find((row) => row.code === villageCode),
-    postalCode: readPostalCode(villageCode),
+    province: toRegion(province),
+    regency: toRegion(regency),
+    district: toRegion(district),
+    village: toRegion(village),
+    postalCode: readPostalCode(village.code),
   }
 }

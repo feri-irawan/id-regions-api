@@ -49,6 +49,22 @@ const loadData = () => {
     name,
   }))
 
+  const postalCodes = new Map<number, number | null>(
+    readRows('kodepos.csv').map(([villageCode, postalCode]) => [
+      Number(villageCode),
+      postalCode ? Number(postalCode) : null,
+    ])
+  )
+
+  const villagesByPostalCode = new Map<number, number[]>()
+  for (const [villageCode, postalCode] of postalCodes) {
+    if (postalCode === null) continue
+
+    const villages = villagesByPostalCode.get(postalCode) ?? []
+    villages.push(villageCode)
+    villagesByPostalCode.set(postalCode, villages)
+  }
+
   return {
     provinces,
     provinceByCode: new Map<number, Region>(provinces.map((p) => [p.code, p])),
@@ -73,12 +89,8 @@ const loadData = () => {
         parentCode: Number(districtCode),
       }))
     ),
-    postalCodes: new Map<number, number | null>(
-      readRows('kodepos.csv').map(([villageCode, postalCode]) => [
-        Number(villageCode),
-        postalCode ? Number(postalCode) : null,
-      ])
-    ),
+    postalCodes,
+    villagesByPostalCode,
   }
 }
 
@@ -163,5 +175,12 @@ export function getFullDataByVillage(villageCode: number) {
     regency.code,
     district.code,
     village.code
+  )
+}
+
+/** Returns the full hierarchy of every village with the given postal code. */
+export function findVillagesByPostalCode(postalCode: number) {
+  return (getData().villagesByPostalCode.get(postalCode) ?? []).flatMap(
+    (code) => getFullDataByVillage(code) ?? []
   )
 }

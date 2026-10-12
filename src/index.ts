@@ -8,6 +8,7 @@ import {
   readPostalCode,
   getFullData,
   getFullDataByVillage,
+  findVillagesByPostalCode,
   findProvince,
   findRegency,
   findDistrict,
@@ -87,6 +88,22 @@ app.get('/villages/:districtCode', (req, res) => {
     findDistrict
   )
   if (code !== null) res.json({ data: readVillages(code) })
+})
+
+app.get('/villages/postalcode/:postalCode', (req, res) => {
+  const { postalCode } = req.params
+  if (!/^\d{5}$/.test(postalCode)) {
+    res.status(400).json({ error: 'Invalid postal code' })
+    return
+  }
+
+  const data = findVillagesByPostalCode(Number(postalCode))
+  if (!data.length) {
+    res.status(404).json({ error: `Postal code ${postalCode} not found` })
+    return
+  }
+
+  res.json({ data })
 })
 
 app.get('/postalcode/:villageCode', (req, res) => {

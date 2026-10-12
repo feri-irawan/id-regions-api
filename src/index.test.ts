@@ -81,6 +81,36 @@ describe('region lists', () => {
   })
 })
 
+describe('GET /villages/postalcode/:postalCode', () => {
+  test('returns every village with the postal code', async () => {
+    const { status, body } = await get('/villages/postalcode/12620')
+    expect(status).toBe(200)
+    expect(body.data.length).toBeGreaterThan(0)
+    for (const item of body.data) expect(item.postalCode).toBe(12620)
+    expect(body.data).toContainEqual({
+      province: { code: 31, name: 'DKI Jakarta' },
+      regency: { code: 3174, name: 'Kota Jakarta Selatan' },
+      district: { code: 317409, name: 'Jagakarsa' },
+      village: { code: 3174091001, name: 'Jagakarsa' },
+      postalCode: 12620,
+    })
+  })
+
+  test('returns 404 for an unused postal code', async () => {
+    const { status, body } = await get('/villages/postalcode/00000')
+    expect(status).toBe(404)
+    expect(body).toEqual({ error: 'Postal code 00000 not found' })
+  })
+
+  test.each(['1234', '123456', 'abcde'])(
+    'rejects invalid postal code %s',
+    async (postalCode) => {
+      const { status } = await get(`/villages/postalcode/${postalCode}`)
+      expect(status).toBe(400)
+    }
+  )
+})
+
 describe('GET /postalcode/:villageCode', () => {
   test('returns the postal code of a village', async () => {
     const { status, body } = await get('/postalcode/1101012002')

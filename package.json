@@ -6,7 +6,8 @@
     "start": "bun run src/server.ts",
     "dev": "bun --watch src/server.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "data:refresh": "bun run scripts/refresh-data/index.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.4.3",

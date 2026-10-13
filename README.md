@@ -9,7 +9,10 @@ API for Indonesian regions. Using data from [Api Wilayah Indonesia](https://gith
 - `GET /districts/:regencyCode` - Get districts by regency code
 - `GET /villages/:districtCode` - Get villages by district code
 - `GET /postalcode/:villageCode` - Get postal code by village code
+- `GET /villages/postalcode/:postalCode` - Get all villages with a postal code, each with its full data
 - `GET /full/:provinceCode/:regencyCode/:districtCode/:villageCode` - Get full data by province code, regency code, district code, and village code
+- `GET /full/:villageCode` - Get full data by village code alone
+- `GET /search?q=:query` - Search regions by name, with optional `level` (`province`, `regency`, `district` or `village`) and `limit` (1-100, default 20)
 
 Codes are numeric: provinces have 2 digits (`11`), regencies 4 (`1101`), districts 6 (`110101`) and villages 10 (`1101012002`).
 
@@ -35,9 +38,32 @@ GET /full/11/1101/110101/1101012002
 
 `/postalcode/:villageCode` returns `{ "data": null }` when the village has no postal code in the dataset.
 
+`/search` ignores case and punctuation, ranks exact matches first, and lists each result's parent regions from the province down. When no name matches exactly, names one or two typos away are added after the real matches, so `surabya` finds Surabaya:
+
+```http
+GET /search?q=jagakarsa&level=village
+```
+
+```json
+{
+  "data": [
+    {
+      "level": "village",
+      "code": 3174091001,
+      "name": "Jagakarsa",
+      "parents": [
+        { "code": 31, "name": "DKI Jakarta" },
+        { "code": 3174, "name": "Kota Jakarta Selatan" },
+        { "code": 317409, "name": "Jagakarsa" }
+      ]
+    }
+  ]
+}
+```
+
 Errors return an `error` message:
 
-- `400` - the code is not a number, e.g. `/regencies/abc`
+- `400` - the code is not a number (e.g. `/regencies/abc`), or a search parameter is invalid
 - `404` - the region does not exist, or the `/full` codes do not belong to each other
 
 ```json

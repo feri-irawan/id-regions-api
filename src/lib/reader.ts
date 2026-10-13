@@ -49,6 +49,22 @@ const loadData = () => {
     name,
   }))
 
+  const postalCodes = new Map<number, number | null>(
+    readRows('kodepos.csv').map(([villageCode, postalCode]) => [
+      Number(villageCode),
+      postalCode ? Number(postalCode) : null,
+    ])
+  )
+
+  const villagesByPostalCode = new Map<number, number[]>()
+  for (const [villageCode, postalCode] of postalCodes) {
+    if (postalCode === null) continue
+
+    const villages = villagesByPostalCode.get(postalCode) ?? []
+    villages.push(villageCode)
+    villagesByPostalCode.set(postalCode, villages)
+  }
+
   return {
     provinces,
     provinceByCode: new Map<number, Region>(provinces.map((p) => [p.code, p])),
@@ -73,12 +89,8 @@ const loadData = () => {
         parentCode: Number(districtCode),
       }))
     ),
-    postalCodes: new Map<number, number | null>(
-      readRows('kodepos.csv').map(([villageCode, postalCode]) => [
-        Number(villageCode),
-        postalCode ? Number(postalCode) : null,
-      ])
-    ),
+    postalCodes,
+    villagesByPostalCode,
   }
 }
 
@@ -149,4 +161,214 @@ export function getFullData(
     village: toRegion(village),
     postalCode: readPostalCode(village.code),
   }
+}
+
+/** Returns the full hierarchy of a village from its code alone. */
+export function getFullDataByVillage(villageCode: number) {
+  const village = findVillage(villageCode)
+  const district = village && findDistrict(village.parentCode)
+  const regency = district && findRegency(district.parentCode)
+  if (!village || !district || !regency) return null
+
+  return getFullData(
+    regency.parentCode,
+    regency.code,
+    district.code,
+    village.code
+  )
+}
+
+/** Returns the full hierarchy of every village with the given postal code. */
+export function findVillagesByPostalCode(postalCode: number) {
+  return (getData().villagesByPostalCode.get(postalCode) ?? []).flatMap(
+    (code) => getFullDataByVillage(code) ?? []
+  )
+}
+
+export const LEVELS = ['province', 'regency', 'district', 'village'] as const
+export type Level = (typeof LEVELS)[number]
+
+export const isLevel = (value: unknown): value is Level =>
+  LEVELS.includes(value as Level)
+
+export interface SearchResult extends Region {
+  level: Level
+  parents: Region[]
+}
+
+interface SearchEntry {
+  level: Level
+  region: Region | ChildRegion
+  key: string
+  /** The name without its alias in brackets, e.g. "aceh" for "Aceh (NAD)" */
+  mainKey: string
+  words: string[]
+  compactKey: string
+}
+
+const findByLevel: Record<
+  Level,
+  (code: number) => Region | ChildRegion | undefined
+> = {
+  province: findProvince,
+  regency: findRegency,
+  district: findDistrict,
+  village: findVillage,
+}
+
+/** Lowercases and drops punctuation, so "Regapu'u" is found by "regapuu". */
+const normalize = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/['’`]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+
+const buildSearchIndex = () => {
+  const data = getData()
+  const entries = (level: Level, regions: Iterable<Region>) =>
+    Array.from(regions, (region) => {
+      const key = normalize(region.name)
+      return {
+        level,
+        region,
+        key,
+        mainKey: normalize(region.name.replace(/\(.*?\)/g, '')),
+        words: key.split(' '),
+        compactKey: key.replace(/ /g, ''),
+      }
+    })
+
+  return [
+    ...entries('province', data.provinces),
+    ...entries('regency', data.regencies.byCode.values()),
+    ...entries('district', data.districts.byCode.values()),
+    ...entries('village', data.villages.byCode.values()),
+  ]
+}
+
+let searchIndex: SearchEntry[] | undefined
+
+/** Returns the ancestors of a region, from its province down. */
+const getParents = (level: Level, region: Region | ChildRegion) => {
+  const parents: Region[] = []
+  let current: Region | ChildRegion | undefined = region
+
+  for (let i = LEVELS.indexOf(level) - 1; i >= 0; i--) {
+    if (!current || !('parentCode' in current)) break
+    current = findByLevel[LEVELS[i]](current.parentCode)
+    if (current) parents.unshift(toRegion(current))
+  }
+
+  return parents
+}
+
+/** Exact matches first, then prefix, word-start and other matches. */
+const rank = ({ key, mainKey }: SearchEntry, query: string) => {
+  if (key === query || mainKey === query) return 0
+  if (key.startsWith(query)) return 1
+  if (key.includes(` ${query}`)) return 2
+  return 3
+}
+
+/** Typos allowed in a query: none below 4 letters, 1 up to 7, then 2. */
+const maxTypos = (query: string) => {
+  const letters = query.replace(/ /g, '').length
+  return letters < 4 ? 0 : letters < 8 ? 1 : 2
+}
+
+/**
+ * Edit distance counting an adjacent swap as one typo, or Infinity as soon
+ * as it is known to exceed max.
+ */
+const typoDistance = (a: string, b: string, max: number) => {
+  if (Math.abs(a.length - b.length) > max) return Infinity
+
+  const width = b.length + 1
+  let previous2 = new Array<number>(width)
+  let previous = Array.from({ length: width }, (_, j) => j)
+  let row = new Array<number>(width)
+
+  for (let i = 1; i <= a.length; i++) {
+    row[0] = i
+    let rowMin = i
+    for (let j = 1; j < width; j++) {
+      let distance = Math.min(
+        previous[j] + 1,
+        row[j - 1] + 1,
+        previous[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      )
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        distance = Math.min(distance, previous2[j - 2] + 1)
+      }
+      row[j] = distance
+      if (distance < rowMin) rowMin = distance
+    }
+    if (rowMin > max) return Infinity
+    ;[previous2, previous, row] = [previous, row, previous2]
+  }
+
+  return previous[b.length] <= max ? previous[b.length] : Infinity
+}
+
+/**
+ * Smallest typo distance between the query and any run of consecutive words
+ * in the name, or the whole name without spaces ("jagakarsa" vs "Jaga Karsa").
+ */
+const fuzzyDistance = (entry: SearchEntry, query: string, max: number) => {
+  const queryWords = query.split(' ').length
+  let best = typoDistance(entry.compactKey, query.replace(/ /g, ''), max)
+  for (let i = 0; i + queryWords <= entry.words.length && best > 0; i++) {
+    const words = entry.words.slice(i, i + queryWords).join(' ')
+    best = Math.min(best, typoDistance(words, query, max))
+  }
+  return best
+}
+
+/**
+ * Finds regions whose name contains the query, best matches first. When
+ * nothing matches exactly and there are fewer results than the limit,
+ * names a typo or two away fill the rest.
+ */
+export function searchRegions(
+  query: string,
+  options: { level?: Level; limit: number }
+): SearchResult[] {
+  const normalizedQuery = normalize(query)
+  if (!normalizedQuery) return []
+
+  searchIndex ??= buildSearchIndex()
+
+  const candidates = options.level
+    ? searchIndex.filter((entry) => entry.level === options.level)
+    : searchIndex
+  const matches = candidates
+    .filter((entry) => entry.key.includes(normalizedQuery))
+    .map((entry) => ({ entry, rank: rank(entry, normalizedQuery) }))
+
+  const max = maxTypos(normalizedQuery)
+  const hasExactMatch = matches.some((match) => match.rank === 0)
+  if (!hasExactMatch && matches.length < options.limit && max > 0) {
+    for (const entry of candidates) {
+      if (entry.key.includes(normalizedQuery)) continue
+      const distance = fuzzyDistance(entry, normalizedQuery, max)
+      // Ranked after every real match, closest first
+      if (distance <= max) matches.push({ entry, rank: 3 + distance })
+    }
+  }
+
+  return matches
+    .sort(
+      (a, b) =>
+        a.rank - b.rank ||
+        LEVELS.indexOf(a.entry.level) - LEVELS.indexOf(b.entry.level) ||
+        a.entry.region.code - b.entry.region.code
+    )
+    .slice(0, options.limit)
+    .map(({ entry: { level, region } }) => ({
+      level,
+      code: region.code,
+      name: region.name,
+      parents: getParents(level, region),
+    }))
 }

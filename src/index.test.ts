@@ -81,6 +81,36 @@ describe('region lists', () => {
   })
 })
 
+describe('GET /villages/postalcode/:postalCode', () => {
+  test('returns every village with the postal code', async () => {
+    const { status, body } = await get('/villages/postalcode/12620')
+    expect(status).toBe(200)
+    expect(body.data.length).toBeGreaterThan(0)
+    for (const item of body.data) expect(item.postalCode).toBe(12620)
+    expect(body.data).toContainEqual({
+      province: { code: 31, name: 'DKI Jakarta' },
+      regency: { code: 3174, name: 'Kota Jakarta Selatan' },
+      district: { code: 317409, name: 'Jagakarsa' },
+      village: { code: 3174091001, name: 'Jagakarsa' },
+      postalCode: 12620,
+    })
+  })
+
+  test('returns 404 for an unused postal code', async () => {
+    const { status, body } = await get('/villages/postalcode/00000')
+    expect(status).toBe(404)
+    expect(body).toEqual({ error: 'Postal code 00000 not found' })
+  })
+
+  test.each(['1234', '123456', 'abcde'])(
+    'rejects invalid postal code %s',
+    async (postalCode) => {
+      const { status } = await get(`/villages/postalcode/${postalCode}`)
+      expect(status).toBe(400)
+    }
+  )
+})
+
 describe('GET /postalcode/:villageCode', () => {
   test('returns the postal code of a village', async () => {
     const { status, body } = await get('/postalcode/1101012002')
@@ -107,6 +137,26 @@ describe('GET /postalcode/:villageCode', () => {
   test('returns 404 for an unknown village', async () => {
     const { status } = await get('/postalcode/1')
     expect(status).toBe(404)
+  })
+})
+
+describe('GET /full/:villageCode', () => {
+  test('returns the same hierarchy as the four-code route', async () => {
+    const short = await get('/full/1101012002')
+    const long = await get('/full/11/1101/110101/1101012002')
+    expect(short.status).toBe(200)
+    expect(short.body).toEqual(long.body)
+  })
+
+  test('returns 404 for an unknown village', async () => {
+    const { status, body } = await get('/full/1101019999')
+    expect(status).toBe(404)
+    expect(body).toEqual({ error: 'Village 1101019999 not found' })
+  })
+
+  test('rejects an invalid code', async () => {
+    const { status } = await get('/full/abc')
+    expect(status).toBe(400)
   })
 })
 
@@ -137,6 +187,93 @@ describe('GET /full/:provinceCode/:regencyCode/:districtCode/:villageCode', () =
   test('rejects invalid codes', async () => {
     const { status } = await get('/full/11/1101/x/1101012002')
     expect(status).toBe(400)
+  })
+})
+
+describe('GET /search', () => {
+  test('ranks exact matches first and includes parents', async () => {
+    const { status, body } = await get('/search?q=aceh')
+    expect(status).toBe(200)
+    expect(body.data[0]).toEqual({
+      level: 'province',
+      code: 11,
+      name: 'Aceh (NAD)',
+      parents: [],
+    })
+  })
+
+  test('filters by level', async () => {
+    const { body } = await get('/search?q=jagakarsa&level=village')
+    expect(body.data).toEqual([
+      {
+        level: 'village',
+        code: 3174091001,
+        name: 'Jagakarsa',
+        parents: [
+          { code: 31, name: 'DKI Jakarta' },
+          { code: 3174, name: 'Kota Jakarta Selatan' },
+          { code: 317409, name: 'Jagakarsa' },
+        ],
+      },
+    ])
+  })
+
+  test.each([
+    ['regapuu', "Regapu'u"],
+    ['UJUNG MANGKI', 'Ujong Mangki (Ujung Mangki)'],
+  ])('ignores case and punctuation for %s', async (q, name) => {
+    const { body } = await get(`/search?q=${encodeURIComponent(q)}`)
+    expect(body.data.map((r: { name: string }) => r.name)).toContain(name)
+  })
+
+  test.each([
+    ['jagakarta', 'Jagakarsa'],
+    ['jakagarsa', 'Jagakarsa'],
+    ['surabya', 'Kota Surabaya'],
+    ['jakarta selatn', 'Kota Jakarta Selatan'],
+  ])('tolerates typos: %s finds %s', async (q, name) => {
+    const { body } = await get(`/search?q=${encodeURIComponent(q)}`)
+    expect(body.data[0].name).toBe(name)
+  })
+
+  test('ranks typo matches after real matches', async () => {
+    const { body } = await get('/search?q=bandungg')
+    const names = body.data.map((r: { name: string }) => r.name)
+    expect(names[0]).toBe('Bandunggede')
+    expect(names).toContain('Kota Bandung')
+  })
+
+  test('skips typo matches when a name matches exactly', async () => {
+    const { body } = await get('/search?q=bakongan')
+    expect(body.data.map((r: { name: string }) => r.name)).toEqual([
+      'Bakongan',
+      'Bakongan Timur',
+    ])
+  })
+
+  test('does not guess for queries under 4 letters', async () => {
+    const { body } = await get('/search?q=jkt')
+    expect(body.data).toEqual([])
+  })
+
+  test('applies the limit', async () => {
+    const { body } = await get('/search?q=jaya&limit=5')
+    expect(body.data).toHaveLength(5)
+  })
+
+  test.each([
+    ['/search', 'Query q must be at least 2 characters'],
+    ['/search?q=a', 'Query q must be at least 2 characters'],
+    [
+      '/search?q=aceh&level=city',
+      'Invalid level, use one of: province, regency, district, village',
+    ],
+    ['/search?q=aceh&limit=0', 'Invalid limit, use a number from 1 to 100'],
+    ['/search?q=aceh&limit=101', 'Invalid limit, use a number from 1 to 100'],
+  ])('rejects %s', async (path, error) => {
+    const { status, body } = await get(path)
+    expect(status).toBe(400)
+    expect(body).toEqual({ error })
   })
 })
 

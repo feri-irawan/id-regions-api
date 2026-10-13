@@ -63,6 +63,7 @@ bun run data:refresh --write  # apply them to src/data
 - 97.6% of villages have a postal code. 2,026 villages are still missing one because no trusted source could confirm it.
 - Missing postal codes, 27 wrong ones and 16 truncated names were filled in from [cahyadsn/wilayah_kodepos](https://github.com/cahyadsn/wilayah_kodepos) and [cahyadsn/wilayah](https://github.com/cahyadsn/wilayah) (Kemendagri codes, MIT License). See [src/data/NOTICE.md](src/data/NOTICE.md).
 - `bun run data:refresh` re-runs that process against the latest source datasets. A value is only used when both Kepmendagri versions agree and the village name matches, or when [erlange/Kodepos-Wilayah-Indonesia](https://github.com/erlange/Kodepos-Wilayah-Indonesia) independently confirms it.
+- To refresh without a local setup, run the **Refresh data** workflow from the Actions tab. It opens a pull request only when the sources have something new, and shows the report on the run page either way. GitHub must be allowed to open pull requests from Actions: Settings → Actions → General → Workflow permissions → *Allow GitHub Actions to create and approve pull requests*.
 
 ## Contributing
 

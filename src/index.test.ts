@@ -4,6 +4,7 @@ import type { AddressInfo } from 'net'
 import app from './index'
 import {
   readDistricts,
+  readPostalCode,
   readProvinces,
   readRegencies,
   readVillages,
@@ -99,7 +100,15 @@ describe('GET /postalcode/:villageCode', () => {
   })
 
   test('returns null for a village without a postal code', async () => {
-    const { status, body } = await get('/postalcode/1805021009')
+    // Looked up rather than hardcoded, since a data refresh may fill any village
+    const village = readProvinces()
+      .flatMap((province) => readRegencies(province.code))
+      .flatMap((regency) => readDistricts(regency.code))
+      .flatMap((district) => readVillages(district.code))
+      .find((village) => readPostalCode(village.code) === null)
+    expect(village).toBeDefined()
+
+    const { status, body } = await get(`/postalcode/${village!.code}`)
     expect(status).toBe(200)
     expect(body).toEqual({ data: null })
   })

@@ -1,0 +1,49 @@
+name: Refresh data
+
+# Run from the Actions tab. Opens a pull request only when the source
+# datasets have postal code or name fixes that src/data does not have yet.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency: refresh-data
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+
+      - name: Refresh postal codes and names
+        run: |
+          {
+            echo 'Ran `bun run data:refresh --write` against the latest source datasets.'
+            echo
+            echo '```'
+            bun run data:refresh --write | grep -v '^Downloading' | sed '/./,$!d'
+            echo '```'
+          } > "$RUNNER_TEMP/report.md"
+          cat "$RUNNER_TEMP/report.md" >> "$GITHUB_STEP_SUMMARY"
+
+      # Pull requests opened with the default token do not trigger CI,
+      # so check the refreshed data here before opening one
+      - run: bun run typecheck
+      - run: bun test
+
+      - name: Open a pull request if the data changed
+        uses: peter-evans/create-pull-request@v7
+        with:
+          # Add a DATA_REFRESH_TOKEN secret (a personal access token) to have
+          # CI run on the pull request as well
+          token: ${{ secrets.DATA_REFRESH_TOKEN || github.token }}
+          branch: chore/refresh-data
+          delete-branch: true
+          author: feri-irawan <feriirawan.akun@gmail.com>
+          commit-message: 'chore(data): refresh postal codes and names'
+          title: 'chore(data): refresh postal codes and names'
+          body-path: ${{ runner.temp }}/report.md

@@ -42,7 +42,7 @@ jobs:
       - run: bun test
 
       - name: Open a pull request if the data changed
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           # Add a DATA_REFRESH_TOKEN secret (a personal access token) to have
           # CI run on the pull request as well

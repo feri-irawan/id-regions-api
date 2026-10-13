@@ -43,7 +43,8 @@ jobs:
           token: ${{ secrets.DATA_REFRESH_TOKEN || github.token }}
           branch: chore/refresh-data
           delete-branch: true
-          author: feri-irawan <feriirawan.akun@gmail.com>
+          # The repository owner, with their GitHub noreply address
+          author: ${{ github.repository_owner }} <${{ github.repository_owner_id }}+${{ github.repository_owner }}@users.noreply.github.com>
           commit-message: 'chore(data): refresh postal codes and names'
           title: 'chore(data): refresh postal codes and names'
           body-path: ${{ runner.temp }}/report.md

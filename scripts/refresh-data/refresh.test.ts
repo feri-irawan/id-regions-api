@@ -60,7 +60,7 @@ describe('sameName', () => {
     ['Banjar Jaya', 'Banjaran Raya'],
     ['Kisam', 'Kuta Buluh'],
     ['Kisam', undefined],
-  ])('%s does not match %s', (a, b) => {
+  ])('%s does not match %p', (a, b) => {
     expect(sameName(a, b)).toBe(false)
   })
 })
@@ -72,7 +72,7 @@ describe('names', () => {
     ['Sumanik (Sumaniak}', true],
     ['"""35 Ilir"""', false],
     ['Ujong Mangki (Ujung Mangki)', false],
-  ])('isBrokenName(%s) is %s', (raw, broken) => {
+  ])('isBrokenName(%s) is %p', (raw, broken) => {
     expect(isBrokenName(raw)).toBe(broken)
   })
 

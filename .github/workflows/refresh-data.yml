@@ -11,6 +11,12 @@ permissions:
 
 concurrency: refresh-data
 
+# Run steps with pipefail, so a failing refresh script fails its step
+# instead of being hidden by the pipe that formats its report
+defaults:
+  run:
+    shell: bash
+
 jobs:
   refresh:
     runs-on: ubuntu-latest
